@@ -96,8 +96,16 @@ if (process.env.NODE_ENV === 'development') {
 
 // Enable CORS
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:5174', 'https://matrimony-madurai.web.app', 'https://matrimony-madurai.firebaseapp.com'],
-    credentials: true
+    origin: [
+        'http://localhost:5173', 
+        'http://localhost:3000',
+        'http://localhost:5174', 
+        'https://matrimony-madurai.web.app', 
+        'https://matrimony-madurai.firebaseapp.com'
+    ],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Mount routers
