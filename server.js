@@ -11,7 +11,7 @@ const http = require('http');
 const path = require('path');
 
 // Load env vars
-dotenv.config();
+dotenv.config({ quiet: true });
 
 // Connect to database
 connectDB();
@@ -145,7 +145,15 @@ httpServer.listen(PORT, () => {
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err, promise) => {
-    console.log(`Error: ${err.message}`);
+    console.log(`❌ Unhandled Rejection: ${err.message}`);
+    if (err.stack) console.log(err.stack);
     // Close server & exit process
     httpServer.close(() => process.exit(1));
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+    console.log(`❌ Uncaught Exception: ${err.message}`);
+    if (err.stack) console.log(err.stack);
+    process.exit(1);
 });

@@ -110,3 +110,51 @@ exports.updateUserStatus = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+
+// @desc    Get Registration Stats (last 6 months)
+// @route   GET /api/admin/registration-stats
+exports.getRegistrationStats = async (req, res) => {
+    try {
+        const stats = [];
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        
+        for (let i = 5; i >= 0; i--) {
+            const date = new Date();
+            date.setMonth(date.getMonth() - i);
+            const month = date.getMonth();
+            const year = date.getFullYear();
+            
+            const startOfMonth = new Date(year, month, 1);
+            const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59);
+            
+            const count = await User.countDocuments({
+                'status.role': { $regex: /^user$/i },
+                createdAt: { $gte: startOfMonth, $lte: endOfMonth }
+            });
+            
+            stats.push({
+                label: monthNames[month],
+                value: count
+            });
+        }
+
+        // Calculate percentage increase between this month and last month
+        const currentMonthCount = stats[5].value;
+        const lastMonthCount = stats[4].value;
+        let percentageIncrease = 0;
+        
+        if (lastMonthCount > 0) {
+            percentageIncrease = Math.round(((currentMonthCount - lastMonthCount) / lastMonthCount) * 100);
+        } else if (currentMonthCount > 0) {
+            percentageIncrease = 100; // From 0 to something is 100% growth
+        }
+
+        res.status(200).json({
+            success: true,
+            data: stats,
+            percentageIncrease: percentageIncrease > 0 ? `+${percentageIncrease}%` : `${percentageIncrease}%`
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};

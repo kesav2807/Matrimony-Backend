@@ -61,6 +61,8 @@ const UserSchema = new mongoose.Schema({
         isPremium: { type: Boolean, default: false },
         isVerified: { type: Boolean, default: false },
         role: { type: String, default: 'User' },
+        plan: { type: String },
+        expiry: { type: Date }
     },
     privacy: {
         profileVisibility: { type: String, enum: ['All', 'Premium', 'Matches'], default: 'All' },
@@ -98,6 +100,17 @@ UserSchema.pre('save', async function(next) {
 
 UserSchema.methods.matchPassword = async function(enteredPassword) {
     return await bcrypt.compare(enteredPassword, this.password);
+};
+
+UserSchema.methods.calculateCompleteness = function() {
+    const fields = [
+        this.basicInfo.name, this.basicInfo.dob, this.basicInfo.religion, this.basicInfo.motherTongue, this.basicInfo.maritalStatus,
+        this.contactInfo.location.city, this.contactInfo.location.state,
+        this.personalDetails.education, this.personalDetails.occupation, this.personalDetails.income, this.personalDetails.caste,
+        this.personalDetails.aboutSelf, (this.profilePhotos && this.profilePhotos.length > 0)
+    ];
+    const completed = fields.filter(f => !!f).length;
+    return Math.round((completed / fields.length) * 100);
 };
 
 module.exports = mongoose.model('User', UserSchema);
