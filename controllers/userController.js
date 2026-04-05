@@ -272,9 +272,48 @@ exports.getShortlistedBy = async (req, res) => {
 
 exports.updateProfile = async (req, res) => {
     try {
-        const user = await User.findByIdAndUpdate(req.user.id, req.body, { new: true });
+        const user = await User.findById(req.user.id);
+        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+        const { basicInfo, personalDetails, contactInfo, partnerPreferences } = req.body;
+
+        if (basicInfo) {
+            // Extract email if present and map to contactInfo.email
+            const { email, ...restBasic } = basicInfo;
+            if (email) user.contactInfo.email = email;
+            user.basicInfo = { ...user.basicInfo, ...restBasic };
+        }
+        if (personalDetails) user.personalDetails = { ...user.personalDetails, ...personalDetails };
+        if (contactInfo) {
+            if (contactInfo.location) {
+                user.contactInfo.location = { ...user.contactInfo.location, ...contactInfo.location };
+            }
+        }
+        
+        if (partnerPreferences) {
+            const { ageMin, ageMax, religion, caste, city, education, ...rest } = partnerPreferences;
+            
+            user.partnerPreferences = { 
+                ...user.partnerPreferences?.toObject(), 
+                ...rest,
+                ageRange: {
+                    min: ageMin !== undefined ? parseInt(ageMin) : user.partnerPreferences?.ageRange?.min,
+                    max: ageMax !== undefined ? parseInt(ageMax) : user.partnerPreferences?.ageRange?.max
+                },
+                // Handle strings to array mapping for matches logic compatibility
+                religion: religion ? [religion] : user.partnerPreferences?.religion,
+                caste: caste ? [caste] : user.partnerPreferences?.caste,
+                location: city ? [city] : user.partnerPreferences?.location,
+                education: education ? [education] : user.partnerPreferences?.education
+            };
+        }
+        
+        await user.save();
         res.json({ success: true, data: user });
-    } catch (error) { res.status(500).json({ success: false, message: error.message }); }
+    } catch (error) { 
+        console.error('Update Profile Error:', error);
+        res.status(500).json({ success: false, message: error.message }); 
+    }
 };
 
 exports.upgradeUser = async (req, res) => {
@@ -361,6 +400,81 @@ exports.markNotificationsRead = async (req, res) => {
             { $set: { isRead: true } }
         );
         res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.uploadProfilePhoto = async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ success: false, message: 'No file uploaded' });
+        }
+
+        const user = await User.findById(req.user.id);
+        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+        const photoUrl = req.file.path;
+        
+        // Push to portfolio if it's not already there
+        if (!user.profilePhotos) user.profilePhotos = [];
+        if (!user.profilePhotos.includes(photoUrl)) {
+            user.profilePhotos.push(photoUrl);
+        }
+
+        // If it's the first photo or primary is empty, set as primary
+        if (!user.profileImage || user.profileImage === '') {
+            user.profileImage = photoUrl;
+        }
+
+        await user.save();
+        res.json({ success: true, data: user, url: photoUrl });
+    } catch (error) {
+        console.error('Photo Upload Error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.deleteProfilePhoto = async (req, res) => {
+    try {
+        const { photoUrl } = req.body;
+        const user = await User.findById(req.user.id);
+        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+        user.profilePhotos = user.profilePhotos.filter(p => p !== photoUrl);
+        
+        // If we deleted the primary image, pick a new one or clear it
+        if (user.profileImage === photoUrl) {
+            user.profileImage = user.profilePhotos[0] || '';
+        }
+
+        await user.save();
+        res.json({ success: true, data: user });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.getProfileMetrics = async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id);
+        if (!user) return res.status(404).json({ success: false });
+
+        const viewsCount = await ProfileView.countDocuments({ profile: req.user.id });
+        const precisionRating = user.calculateCompleteness();
+        
+        // Dynamic Match Score logic: base completeness + photo bonus
+        const photoBonus = (user.profilePhotos?.length || 0) * 5;
+        const matchScoreImpact = Math.min(100, Math.round(precisionRating * 0.8 + photoBonus));
+
+        res.json({
+            success: true,
+            stats: {
+                totalViews: viewsCount || 0,
+                matchScore: matchScoreImpact,
+                auditPrecision: precisionRating
+            }
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
