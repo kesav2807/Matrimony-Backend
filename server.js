@@ -58,11 +58,17 @@ io.on('connection', (socket) => {
 
     // Handle real-time messaging
     socket.on('new message', (newMessageReceived) => {
-        const chat = newMessageReceived.chat || newMessageReceived.receiver; // Depending on how frontend sends it
-        if (!chat) return console.log('Chat/Receiver not defined');
-
-        // Emit to the receiver's private room
+        const chat = newMessageReceived.chat || newMessageReceived.receiver;
+        if (!chat) return;
         socket.in(chat).emit('message received', newMessageReceived);
+    });
+
+    socket.on('typing', ({ receiverId, senderId }) => {
+        socket.in(receiverId).emit('typing', { senderId });
+    });
+
+    socket.on('stop typing', ({ receiverId, senderId }) => {
+        socket.in(receiverId).emit('stop typing', { senderId });
     });
 
     socket.on('disconnect', () => {
